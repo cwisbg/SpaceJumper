@@ -1,0 +1,508 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+public class Player_v3 : MonoBehaviour {
+    public float Health = 1.0f;
+    public float HealthMax = 10;
+    public int LifeCount = 3;
+    public float HealthTrack = 0f;
+    public bool IsDoHurt = false;
+    public float HealthDecaySpeed = 2f;
+    public float MoveSpeed = 40f;
+    public float RotationSpeed = 40;
+    public float GravityForce = 5;
+    public float JumpSpeed = 300;
+    public GameObject LineObject;
+    //public GameObject PlanetListParent;
+    public GameObject TakeOffEffect;
+    public GameObject ThrustTrails;
+    public SpriteRenderer ObjectSprite;
+    public GameObject DeathPrefab;
+    public float LineRenderOffset = 1f;
+    public LayerMask groundLayer;
+    public float RayLength = .5f;
+    public float SurfaceSearchOffset = 2;
+    public bool OnPlanet = false;
+    private LineRenderer LineRenderObj;
+    private GameObject ClickedPlanet;
+    private GameObject Planet = null;
+    private Planets PlanetClosest;
+    private Vector3 PlayerPosition;
+    private Vector3 PlanetPosition;
+    private Vector3 PlanetDirection;
+    private Vector3 OnPlanetPos;
+    private Vector3 OnPLanetHitPos;
+    private Vector3 OnPlanetDir;
+    private Vector3 MouseDirection;
+    private float PlayerPlanetAngle = 0.0f;
+    private List<Planets> PlanetList = new List<Planets>();
+    private Rigidbody2D playerRigidBody;
+    private Vector3 LineStart = new Vector3(1000, 0, 0);
+    private bool MoveVertical = false;
+    public GameObject TestObj;
+    private CircleCollider2D PlanetCollider = null;
+    private PolygonCollider2D PlanetColliderP = null;
+    private BoxCollider2D PlanetColliderBC = null;
+    private float deadTimer = 2f;
+    private ParticleSystem.EmissionModule TrailsParticlesModule;
+    private ParticleSystem TrailsParticles;
+    private bool DoDeath = true;
+    public bool IsAlive = true;
+    private float MouseDownTime = 0.0f;
+    public SceneLoad_Restart SceneRestarter;
+    public bool MouseInvert = false;
+    private int MouseInvertSave;
+    private Planets Saveplanets = new Planets();
+    public float OffPlanetForce = 4f;
+    //private Vector3 PlanetDirection;
+    private Vector3 PlanetDirectionNorm;
+    //public GameObject FollowCamera;
+    //private Vector3 CameraTargetPosition;
+    //public Vector3 CameraFollowOffset;
+    class Planets
+    {
+        public GameObject PlanetGameObj = null;
+        public bool DoSearch = true;
+        public Vector3 RayHitPosition;
+    }
+    GameObject MousedObject(Vector3 mousePos)
+    {
+        GameObject HitObj = null;
+        Vector2 MousePos2D = new Vector2(mousePos.x, mousePos.y);
+        RaycastHit2D hit = Physics2D.Raycast(MousePos2D, Vector2.zero, groundLayer);
+        if (hit)
+        {
+            HitObj = hit.transform.gameObject;
+        }
+        return HitObj;
+    }
+    Vector3 MousePosition()
+    {
+        Vector3 MousePos = Input.mousePosition;
+        MousePos = Camera.main.ScreenToWorldPoint(MousePos);
+        MousePos = new Vector3(MousePos.x, MousePos.y, 0f);
+        return MousePos;
+    }
+
+    Planets GetClosest(List<Planets> PlanetList, Vector3 CloseToPos)
+    {
+        Planets bestTarget = new Planets();
+        float closestDistanceSqr = Mathf.Infinity;
+        float dSqrToTarget = Mathf.Infinity;
+        int PlanetListLen = PlanetList.Count;
+        Vector3 HitPointV3 = new Vector3(10000,0,0);
+        Vector3 directionToTarget;
+        //Vector3 directionToTargetN;
+        LayerMask PlanetSearch = 14;
+
+        for (int i = 0; i < PlanetListLen; i++)
+        {
+            //PlanetList[i].PlanetGameObj.layer = 14;
+            directionToTarget = PlanetList[i].PlanetGameObj.transform.position - CloseToPos;
+            ////directionToTarget = CloseToPos - PlanetList[i].PlanetGameObj.transform.position;
+            //directionToTargetN = directionToTarget;
+            directionToTarget.Normalize();
+            
+            RaycastHit2D hitSearch = Physics2D.Raycast(CloseToPos, directionToTarget, 10 , groundLayer);
+            if (hitSearch.collider != null)
+            {
+
+                HitPointV3.x = hitSearch.point.x;
+                HitPointV3.y = hitSearch.point.y;
+                Debug.DrawLine(transform.position, HitPointV3, Color.magenta);
+                //directionToTarget = HitPointV3 - CloseToPos;
+                //PlanetList[i].RayHitPosition = HitPointV3;
+                //float dSqrToTarget = directionToTarget.sqrMagnitude;
+                //dSqrToTarget = Vector2.Distance(HitPointV3, CloseToPos);
+                if (hitSearch.distance < closestDistanceSqr)
+                {
+                    closestDistanceSqr = hitSearch.distance;
+                    //bestTarget = PlanetList[i];
+                    bestTarget.PlanetGameObj = hitSearch.transform.gameObject;
+                }
+            }
+
+            //PlanetList[i].PlanetGameObj.layer = 8;
+            //float dSqrToTarget = Vector2.Distance(PlanetList[i].PlanetGameObj.transform.position, CloseToPos);
+            //if (dSqrToTarget < closestDistanceSqr)
+            //{
+            //    closestDistanceSqr = dSqrToTarget;
+            //    bestTarget = PlanetList[i];
+            //}
+
+            //Debug.DrawLine(transform.position, bestTarget.PlanetGameObj.transform.position, Color.red);
+            //if (PlanetList[i].DoSearch)
+            //{
+            //    Vector3 directionToTarget = PlanetList[i].PlanetGameObj.transform.position - CloseToPos;
+            //    Vector3 directionToTargetN = directionToTarget;
+            //    directionToTargetN.Normalize();
+            //    RaycastHit2D hitSearch = Physics2D.Raycast(CloseToPos, directionToTargetN, 10, groundLayer);
+            //    //Debug.DrawLine(transform.position, transform.position + directionToTargetN * 10, Color.magenta);
+            //    if (hitSearch.collider != null)
+            //    {
+            //        //Debug.DrawLine(transform.position, hitSearch.point, Color.red);
+            //        HitPointV3.x = hitSearch.point.x;
+            //        HitPointV3.y = hitSearch.point.y;
+            //        //directionToTarget = HitPointV3 - CloseToPos;
+            //        //PlanetList[i].RayHitPosition = HitPointV3;
+            //        //float dSqrToTarget = directionToTarget.sqrMagnitude;
+            //        float dSqrToTarget = Vector2.Distance(HitPointV3, CloseToPos);
+            //        if (dSqrToTarget < closestDistanceSqr)
+            //        {
+            //            closestDistanceSqr = dSqrToTarget;
+            //            bestTarget = PlanetList[i];
+            //        }
+            //    }
+
+
+
+            //}
+            //else
+            //{
+            //    //PlanetList[i].DoSearch = true;
+            //}
+        }
+        //Debug.DrawLine(transform.position, bestTarget.PlanetGameObj.transform.position, Color.magenta);
+        return bestTarget;
+    }
+
+    Vector3 GetClosestRaycast()
+    {
+        Vector3 bestTarget = Vector3.zero;
+
+        List<Vector3> RayList = new List<Vector3>();
+        Vector3 dirUp = transform.up;
+        RayList.Add(dirUp * RayLength);
+        Vector3 dirLeft = transform.up - transform.right;
+        dirLeft.Normalize();
+        RayList.Add(dirLeft * RayLength);
+        //Vector3 dirDown = Vector3.down;
+        //RayList.Add(dirDown * RayLength);
+        //Vector3 dirForward = Vector3.right + Vector3.down;
+        //RayList.Add(dirForward.normalized * RayLength);
+        //Vector3 dirBack = Vector3.left + Vector3.down;
+        //RayList.Add(dirBack.normalized * RayLength);
+        //RayList.Add(Vector3.left * RayLength);
+        //RayList.Add(Vector3.right * RayLength);
+
+        for (int i = 0; i < RayList.Count; i++)
+        {
+            RaycastHit2D hit = Physics2D.Raycast(transform.position, RayList[i], 1 * RayLength);
+            Debug.DrawLine(transform.position, transform.position + RayList[i], Color.blue);
+            if (hit.collider != null)
+            {
+                Debug.DrawLine(transform.position, hit.point, Color.red);
+                bestTarget = hit.point;
+            }
+        }
+        return bestTarget;
+    }
+
+
+    Vector3 PLanetLaunchLine(Vector3 StartPos, Vector3 MousePos)
+    {
+        Vector3 SavePos = StartPos;
+        Vector3 SaveDir = Vector3.zero;
+        Vector3 NewPosDir = Vector3.zero;
+        StartPos.z = LineRenderOffset;
+        LineRenderObj.SetPosition(0, StartPos);
+        
+        if (MouseInvert)
+        {
+            NewPosDir = MousePos - SavePos;
+        }
+        else
+        {
+            NewPosDir = SavePos - MousePos;
+        }
+
+        float VectorMag = Vector3.Magnitude(NewPosDir);
+        NewPosDir.Normalize();
+        NewPosDir *= Mathf.Clamp(VectorMag,0.1f, 2f);
+        SaveDir = NewPosDir;
+        NewPosDir += SavePos;
+        NewPosDir.z = LineRenderOffset;
+        LineRenderObj.SetPosition(1, NewPosDir);
+        return SaveDir;
+    }
+    Vector3 PST(Vector3 Planet, Vector3 Direction) // Planet Surface Tracker
+    {
+        Vector3 SurfacePoint = Vector3.zero;
+        return SurfacePoint;
+    }
+
+
+    void Start () {
+        LifeCount = PlayerPrefs.GetInt("Player_Lives");
+        //MouseInvertSave = PlayerPrefs.GetInt("Player_ControlInvert");
+        //if (MouseInvertSave == 0)
+        //{
+        //    MouseInvert = true;
+        //}
+        //if (MouseInvertSave == 1)
+        //{
+        //    MouseInvert = false;
+        //}
+        playerRigidBody = transform.GetComponent<Rigidbody2D>();
+        LineRenderObj = LineObject.GetComponent<LineRenderer>();
+        TrailsParticles = ThrustTrails.GetComponent<ParticleSystem>();
+        TrailsParticlesModule = TrailsParticles.emission;
+        //foreach (Transform potentialTarget in PlanetListParent.transform)
+        
+        foreach (GameObject child in GameObject.FindGameObjectsWithTag("Planets"))
+        {
+            Planets potentialTarget = new Planets();
+            potentialTarget.PlanetGameObj = child;
+            PlanetList.Add(potentialTarget);
+            potentialTarget.PlanetGameObj.layer = 8;
+        }
+
+        //PlanetClosest = GetClosest(PlanetList, PlayerPosition);
+        //if (PlanetClosest != null)
+        //{
+        //    PlanetClosest.PlanetGameObj.layer = 8;
+        //    Saveplanets = PlanetClosest;
+        //}
+    }
+
+
+    void Update() {
+        if (Health > 0)
+        {
+            if (HealthTrack < Health)
+            {
+                //IsDoHurt = true;
+            }
+            PlayerPosition = transform.position;
+            //if (PlanetClosest != null)
+            //{
+            //    //PlanetPosition = PlanetClosest.PlanetGameObj.transform.position;
+            //    PlanetPosition = PlanetClosest.RayHitPosition;
+            //    OnPLanetHitPos = PlanetPosition;
+            //}
+            //CameraTargetPosition = PlayerPosition + CameraFollowOffset;
+            if (Input.GetMouseButtonUp(0) && IsAlive == true && OnPlanet == true)
+            {
+                if (MouseDownTime >= 0.3f)
+                {
+                    MoveVertical = true;
+                }
+                MouseDownTime = 0;
+            }
+
+            //Debug.Log(MouseDownTime);
+
+
+            LineRenderObj.SetPosition(0, LineStart);
+            LineRenderObj.SetPosition(1, LineStart);
+
+            if (OnPlanet)
+            {
+                PlanetPosition = PlanetClosest.PlanetGameObj.transform.position;
+                //Debug.DrawLine(PlanetPosition, PlayerPosition, Color.white);
+                TrailsParticlesModule.enabled = false;
+                Vector3 StartDir = PlayerPosition - PlanetPosition;
+                StartDir.Normalize();
+
+                //Debug.DrawRay(PlanetPosition, StartDir * 3, Color.cyan);
+
+                Vector3 EndDir = (PlanetPosition + MouseDirection) - PlanetPosition;
+                //Vector3 EndDir = (OnPLanetHitPos + MouseDirection) - PlanetPosition;
+                EndDir.Normalize();
+                //Debug.DrawRay(PlanetPosition, EndDir * 3, Color.red);
+                Vector3 MiddleDir = (StartDir * 0.8f) + (EndDir * 0.2f);
+                MiddleDir.Normalize();
+                Vector3 ToSurface = MiddleDir;
+                float dist = Vector3.Distance(PlayerPosition, PlanetPosition);
+                //MiddleDir *= (PlanetClosest.transform.localScale[0]*0.5f) * SurfaceSearchOffset;
+                MiddleDir *= (dist + 0.05f);
+                MiddleDir += PlanetPosition;
+                ToSurface *= -1;
+                RaycastHit2D SurfaceHit = Physics2D.Raycast(MiddleDir, ToSurface, RayLength * 1.5f, groundLayer);
+                //Debug.DrawLine(MiddleDir, MiddleDir + (ToSurface * (RayLength * 1.5f)), Color.yellow);
+
+                //
+
+                if (SurfaceHit.collider != null)
+                {
+                    //Debug.DrawLine(SurfaceHit.point, SurfaceHit.point + SurfaceHit.normal, Color.blue);
+                    OnPLanetHitPos = SurfaceHit.point;
+                    Vector3 NewPos = Vector3.Lerp(transform.position, OnPLanetHitPos, MoveSpeed * Time.deltaTime);
+                    transform.position = NewPos;
+                    OnPlanetDir = SurfaceHit.normal;
+                }
+                else
+                {
+                    OnPlanet = false;
+                }
+
+                OnPlanetDir += (MouseDirection * 0.5f);
+                //PlanetDirection = OnPlanetPos - transform.position;
+                Vector3 NewDirGravity = Vector3.Lerp(transform.up, OnPlanetDir, RotationSpeed * Time.deltaTime);
+                transform.up = NewDirGravity;
+                if (MoveVertical == true)
+
+                {
+
+                    PlanetClosest.DoSearch = false;
+
+                    //SpriteRenderer planetSprite = PlanetClosest.PlanetGameObj.GetComponent<SpriteRenderer>();
+                    //planetSprite.enabled = false;
+
+                    Saveplanets = PlanetClosest;
+                    PlanetClosest.PlanetGameObj.layer = 0;
+
+                    OnPlanet = false;
+                    MoveVertical = false;
+                    //PlanetCollider = PlanetClosest.PlanetGameObj.GetComponent<CircleCollider2D>();
+
+
+                    var Explosion = (GameObject)Instantiate(TakeOffEffect, PlayerPosition, transform.rotation);
+                    Destroy(Explosion, 0.5f);
+                    MouseDirection.Normalize();
+                    playerRigidBody.AddForce(MouseDirection * JumpSpeed);
+                    transform.up = MouseDirection;
+                }
+                if (Health < HealthMax)
+                {
+                    //Health += HealthDecaySpeed * Time.deltaTime;
+
+                    //IsDoHurt = false;
+                }
+
+            }
+            // Cast Ray from player in the direction of closest planet
+            else
+            {
+                TrailsParticlesModule.enabled = true;
+                ObjectSprite.color = Color.Lerp(new Color(1, 0, 0), new Color(1, 1, 1), Health);
+
+                PlanetClosest = GetClosest(PlanetList, PlayerPosition);
+                
+                if (PlanetClosest.PlanetGameObj != null)
+                {
+                    PlanetPosition = PlanetClosest.PlanetGameObj.transform.position;
+                    //Debug.Log(PlanetClosest.PlanetGameObj);
+                    //PlanetPosition = PlanetClosest.RayHitPosition;
+                    Debug.DrawLine(transform.position, PlanetPosition, Color.green);
+                    //PlanetClosest.DoSearch = false;
+
+
+
+                    PlanetDirection = PlanetPosition - PlayerPosition;
+                    PlanetDirectionNorm = PlanetDirection;
+                    PlanetDirectionNorm.Normalize();
+
+                    RaycastHit2D hit = Physics2D.Raycast(PlayerPosition, PlanetDirectionNorm, RayLength, groundLayer);
+                    //Debug.DrawLine(PlayerPosition, PlayerPosition + PlanetDirectionNorm * RayLength, Color.blue);
+
+                    if (hit.collider != null)
+                    {
+                        if (Saveplanets.PlanetGameObj != null)
+                        {
+                            Saveplanets.DoSearch = true;
+
+                            //SpriteRenderer planetSprite = Saveplanets.PlanetGameObj.GetComponent<SpriteRenderer>();
+                            //planetSprite.enabled = true;
+
+                            Saveplanets.PlanetGameObj.layer = 8;
+                        }
+
+                        //Debug.DrawLine(PlayerPosition, hit.point, Color.red);
+                        OnPlanet = true;
+                        playerRigidBody.velocity = Vector2.zero;
+                        playerRigidBody.angularVelocity = 0.0f;
+                        OnPlanetPos = hit.point;
+                        transform.position = hit.point;
+                        OnPlanetDir = hit.normal;
+                        //if (PlanetCollider != null)
+                        //{
+                        //    PlanetCollider.enabled = true;
+                        //}
+                        //if (PlanetColliderP != null)
+                        //{
+                        //    PlanetColliderP.enabled = true;
+                        //}
+
+                    }
+                    else
+                    {
+                        OnPlanet = false;
+                        //PlanetClosest.layer = 0;
+                    }
+                }
+
+                //Health -= HealthDecaySpeed * Time.deltaTime;
+            }
+
+
+            if (Input.GetMouseButton(0))
+            {
+                Vector3 MousePos = MousePosition();
+                if (IsAlive)
+                {
+
+                    MouseDirection = PLanetLaunchLine(transform.position, MousePos);
+                    //MouseDirection = PLanetLaunchLine(MousePos,transform.position);
+
+
+
+                    //MouseDirection.Normalize();
+                }
+
+
+                if (!OnPlanet)
+                {
+                    MouseDirection.Normalize();
+                    playerRigidBody.AddForce(MouseDirection * OffPlanetForce);
+                    Vector3 OffPlanetDir = Vector3.Lerp(transform.up, MouseDirection, 5f * Time.deltaTime);
+                    transform.up = OffPlanetDir;
+                }
+                else
+                {
+                    //CameraTargetPosition += MouseDirection * (10f*Time.deltaTime);
+                }
+                MouseDownTime += 1 * Time.deltaTime;
+            }
+
+            //Vector3 NewCamPos = Vector3.Slerp(FollowCamera.transform.position, CameraTargetPosition, 1f);
+            //FollowCamera.transform.position = NewCamPos; // Set camera positition
+        }
+        if (Health <= 0.0f)
+        {
+            
+            ObjectSprite.enabled = false;
+            if (DoDeath)
+            {
+                Debug.Log("Is Dead");
+  
+                LifeCount -= 1;
+                PlayerPrefs.SetInt("Player_Lives", LifeCount);
+                PlayerPrefs.Save();
+                Debug.Log("Killed");
+                
+                var DeathExplosion = (GameObject)Instantiate(DeathPrefab, PlayerPosition, transform.rotation);
+                //DeathExplosion.transform.parent = transform;
+                //Destroy(LandingExplosion, 1.5f);
+                playerRigidBody.velocity = Vector2.zero;
+                playerRigidBody.angularVelocity = 0.0f;
+                DoDeath = false;
+                IsAlive = false;
+                LineRenderObj.SetPosition(0, LineStart);
+                LineRenderObj.SetPosition(1, LineStart);
+            }
+
+            TrailsParticlesModule.enabled = false;
+            if (deadTimer <= 0.0f)
+            {
+                SceneRestarter.LoadScene();
+                //Scene scene = SceneManager.GetActiveScene();
+                //SceneManager.LoadScene(scene.buildIndex);
+            }
+            deadTimer -= 1f * Time.deltaTime;   
+        }
+        HealthTrack = Health;
+    }
+}
